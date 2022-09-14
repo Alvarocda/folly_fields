@@ -73,7 +73,8 @@ abstract class AbstractList<
   final String deleteErrorText;
   final String searchListEmpty;
   final String addText;
-  final String searchText;
+  final bool showSearchButton;
+  final String searchButtonText;
   final String listEmpty;
   final bool showRefreshButton;
   final String refreshButtonText;
@@ -121,7 +122,8 @@ abstract class AbstractList<
     this.deleteErrorText = 'Ocorreu um erro ao tentar excluir:\n%s',
     this.searchListEmpty = 'Nenhum documento.',
     this.addText = 'Adicionar %s',
-    this.searchText = 'Pesquisar %s',
+    this.showSearchButton = true,
+    this.searchButtonText = 'Pesquisar %s',
     this.listEmpty = 'Sem %s até o momento.',
     this.showRefreshButton = false,
     this.refreshButtonText = 'Atualizar',
@@ -160,22 +162,25 @@ class AbstractListState<
       GlobalKey<RefreshIndicatorState>();
 
   final ScrollController _scrollController = ScrollController();
-  final StreamController<bool?> _streamController = StreamController<bool?>();
+  final StreamController<int> _streamController = StreamController<int>();
+
+  final ValueNotifier<bool> _insertNotifier = ValueNotifier<bool>(false);
+  final ValueNotifier<Map<ConsumerPermission, AbstractMapFunction>>
+      _mapFunctionsNotifier =
+      ValueNotifier<Map<ConsumerPermission, AbstractMapFunction>>(
+    <ConsumerPermission, AbstractMapFunction>{},
+  );
 
   List<T> _globalItems = <T>[];
   bool _loading = false;
   int _page = 0;
 
-  bool _insert = false;
   bool _update = false;
   bool _delete = false;
 
-  Map<Object, T> selections = <Object, T>{};
+  final Map<Object, T> _selections = <Object, T>{};
 
   final Map<String, String> _qsParam = <String, String>{};
-
-  final Map<ConsumerPermission, AbstractMapFunction> effectiveMapFunctions =
-      <ConsumerPermission, AbstractMapFunction>{};
 
   final Map<ConsumerPermission, AbstractModelFunction<T>>
       effectiveModelFunctions =
@@ -193,6 +198,20 @@ class AbstractListState<
     if (widget.qsParam.isNotEmpty) {
       _qsParam.addAll(widget.qsParam);
     }
+  }
+
+  ///
+  ///
+  ///
+  Future<bool> _loadPermissions(BuildContext context) async {
+    if (!widget.selection) {
+      ConsumerPermission permission =
+          await widget.consumer.checkPermission(context, <String>[]);
+
+      _insertNotifier.value = permission.insert && widget.onAdd != null;
+      _update = permission.update && widget.onUpdate != null;
+      _delete = permission.delete;
+    }
 
     _scrollController.addListener(() {
       if (_scrollController.position.pixels >=
@@ -203,14 +222,10 @@ class AbstractListState<
       }
     });
 
-    _loadPermissions(context);
-  }
-
-  ///
-  ///
-  ///
-  Future<void> _loadPermissions(BuildContext context) async {
     if (widget.mapFunctions != null) {
+      Map<ConsumerPermission, AbstractMapFunction> effectiveMapFunctions =
+          <ConsumerPermission, AbstractMapFunction>{};
+
       for (AbstractMapFunction headerFunction in widget.mapFunctions!) {
         ConsumerPermission permission = await widget.consumer
             .checkPermission(context, headerFunction.routeName);
@@ -218,6 +233,10 @@ class AbstractListState<
         if (permission.view) {
           effectiveMapFunctions[permission] = headerFunction;
         }
+      }
+
+      if (effectiveMapFunctions.isNotEmpty) {
+        _mapFunctionsNotifier.value = effectiveMapFunctions;
       }
     }
 
@@ -233,6 +252,8 @@ class AbstractListState<
     }
 
     await _loadData(context);
+
+    return true;
   }
 
   ///
@@ -245,22 +266,13 @@ class AbstractListState<
     if (clear) {
       _globalItems = <T>[];
       _page = 0;
-      _streamController.add(null);
+      _streamController.add(-2);
     } else {
       _loading = true;
-      _streamController.add(false);
+      _streamController.add(-1);
     }
 
     try {
-      if (!widget.selection) {
-        ConsumerPermission permission =
-            await widget.consumer.checkPermission(context, <String>[]);
-
-        _insert = permission.insert && widget.onAdd != null;
-        _update = permission.update && widget.onUpdate != null;
-        _delete = permission.delete;
-      }
-
       _qsParam['f'] = '${_page * widget.itemsPerPage}';
       _qsParam['q'] = '${widget.itemsPerPage}';
       _qsParam['s'] = '${widget.selection}';
@@ -272,13 +284,13 @@ class AbstractListState<
       );
 
       if (result.isEmpty) {
-        _page = -1;
+        _streamController.add(0);
       } else {
         _page++;
         _globalItems.addAll(result);
       }
 
-      _streamController.add(true);
+      _streamController.add(_page);
       _loading = false;
     } on Exception catch (e, s) {
       if (kDebugMode) {
@@ -305,279 +317,255 @@ class AbstractListState<
   ///
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<bool?>(
-      stream: _streamController.stream,
-      builder: (BuildContext context, AsyncSnapshot<bool?> snapshot) {
-        if (snapshot.hasError) {
-          return Scaffold(
-            appBar: AppBar(
-              title: _getScaffoldTitle(context),
-              actions: <Widget>[
-                /// Refresh Button
-                if (widget.showRefreshButton)
-                  IconButton(
-                    tooltip: widget.refreshButtonText,
-                    icon: const Icon(FontAwesomeIcons.arrowsRotate),
-                    onPressed: () => _loadData(context),
-                  ),
-              ],
-            ),
-            bottomNavigationBar:
-                widget.uiBuilder.buildBottomNavigationBar(context),
-            body: widget.uiBuilder.buildBackgroundContainer(
-              context,
-              Column(
-                children: <Widget>[
-                  Scrollbar(
-                    child: RefreshIndicator(
-                      key: _refreshIndicatorKey,
-                      onRefresh: () => _loadData(context),
-                      child: TextMessage(snapshot.error.toString()),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        }
-
-        if (snapshot.hasData) {
-          /// CircularProgressIndicator at list final.
-          int itemCount = _globalItems.length;
-          if (!snapshot.data!) {
-            itemCount++;
-          }
-
-          Widget? fabAdd;
-
-          List<Widget> actions = <Widget>[];
-
+    return Scaffold(
+      appBar: AppBar(
+        title: _getScaffoldTitle(context),
+        actions: <Widget>[
           /// Select All Button
           if (widget.selection == true &&
               widget.multipleSelection == true &&
-              widget.invertSelection == true) {
-            actions.add(
-              IconButton(
-                tooltip: widget.invertSelectionText,
-                icon: const Icon(Icons.select_all),
-                onPressed: () {
-                  for (T model in _globalItems) {
-                    if (selections.containsKey(model.id)) {
-                      selections.remove(model.id);
-                    } else {
-                      selections[model.id!] = model;
-                    }
+              widget.invertSelection == true)
+            IconButton(
+              tooltip: widget.invertSelectionText,
+              icon: const Icon(Icons.select_all),
+              onPressed: () {
+                for (T model in _globalItems) {
+                  if (_selections.containsKey(model.id)) {
+                    _selections.remove(model.id);
+                  } else {
+                    _selections[model.id!] = model;
                   }
-                  setState(() {});
-                },
-              ),
-            );
-          }
+                }
+                _streamController.add(_page);
+              },
+            ),
 
           /// Search Button
-          if (FollyFields().isOnline) {
-            actions.add(
-              IconButton(
-                tooltip: sprintf(
-                  widget.searchText,
-                  <dynamic>[widget.uiBuilder.superSingle(context)],
-                ),
-                icon: const Icon(Icons.search),
-                onPressed: _search,
+          if (widget.showSearchButton)
+            IconButton(
+              tooltip: sprintf(
+                widget.searchButtonText,
+                <dynamic>[widget.uiBuilder.superSingle(context)],
               ),
-            );
-          }
+              icon: const Icon(Icons.search),
+              onPressed: _search,
+            ),
 
           /// Refresh Button
-          if (widget.showRefreshButton) {
-            actions.add(
-              IconButton(
-                tooltip: widget.refreshButtonText,
-                icon: const Icon(FontAwesomeIcons.arrowsRotate),
-                onPressed: () => _loadData(context),
-              ),
-            );
-          }
+          if (widget.showRefreshButton)
+            IconButton(
+              tooltip: widget.refreshButtonText,
+              icon: const Icon(FontAwesomeIcons.arrowsRotate),
+              onPressed: () => _loadData(context),
+            ),
 
           /// Selection Confirm Button
-          if (widget.selection) {
-            if (widget.multipleSelection) {
-              actions.add(
-                IconButton(
-                  tooltip: sprintf(
-                    widget.selectionText,
-                    <dynamic>[widget.uiBuilder.superPlural(context)],
-                  ),
-                  icon: const FaIcon(FontAwesomeIcons.check),
-                  onPressed: () => Navigator.of(context)
-                      .pop(List<T>.from(selections.values)),
-                ),
-              );
-            }
-          } else {
-            /// Action Routes
-            for (MapEntry<ConsumerPermission, AbstractMapFunction> entry
-                in effectiveMapFunctions.entries) {
-              actions.add(
-                MapFunctionButton(
-                  mapFunction: entry.value,
-                  permission: entry.key,
-                  qsParam: _qsParam,
-                  selection: widget.selection,
-                  callback: (Map<String, String> map) {
-                    _qsParam.addAll(map);
-                    _loadData(context);
-                  },
-                ),
-              );
-            }
-
-            /// Add Button
-            if (_insert) {
-              if (FollyFields().isWeb) {
-                actions.add(
-                  IconButton(
-                    tooltip: sprintf(
-                      widget.addText,
-                      <dynamic>[widget.uiBuilder.superSingle(context)],
-                    ),
-                    icon: const FaIcon(FontAwesomeIcons.plus),
-                    onPressed: _addEntity,
-                  ),
-                );
-              } else {
-                fabAdd = FloatingActionButton(
-                  tooltip: sprintf(
-                    widget.addText,
-                    <dynamic>[widget.uiBuilder.superSingle(context)],
-                  ),
-                  onPressed: _addEntity,
-                  child: const FaIcon(FontAwesomeIcons.plus),
-                );
-              }
-            }
-
-            /// Legend Button
-            if (widget.uiBuilder.listLegend(context).isNotEmpty) {
-              actions.add(
-                IconButton(
-                  tooltip: widget.uiBuilder.listLegendTitle(context),
-                  icon: FaIcon(widget.uiBuilder.listLegendIcon(context)),
-                  onPressed: _showListLegend,
-                ),
-              );
-            }
-          }
-
-          return Scaffold(
-            appBar: AppBar(
-              title: _getScaffoldTitle(context),
-              actions: actions,
+          if (widget.selection && widget.multipleSelection)
+            IconButton(
+              tooltip: sprintf(
+                widget.selectionText,
+                <dynamic>[widget.uiBuilder.superPlural(context)],
+              ),
+              icon: const FaIcon(FontAwesomeIcons.check),
+              onPressed: () =>
+                  Navigator.of(context).pop(List<T>.from(_selections.values)),
             ),
-            bottomNavigationBar:
-                widget.uiBuilder.buildBottomNavigationBar(context),
-            body: widget.uiBuilder.buildBackgroundContainer(
-              context,
-              RefreshIndicator(
-                key: _refreshIndicatorKey,
-                onRefresh: () => _loadData(context),
-                child: _globalItems.isEmpty
-                    ? TextMessage(
-                        sprintf(
-                          widget.listEmpty,
-                          <dynamic>[
-                            widget.uiBuilder.superPlural(context).toLowerCase(),
-                          ],
+
+          /// Action Routes
+          if (!widget.selection)
+            ValueListenableBuilder<
+                Map<ConsumerPermission, AbstractMapFunction>>(
+              valueListenable: _mapFunctionsNotifier,
+              builder: (
+                BuildContext context,
+                Map<ConsumerPermission, AbstractMapFunction> mapFunctions,
+                _,
+              ) {
+                if (mapFunctions.isEmpty) {
+                  return const SizedBox.shrink();
+                }
+
+                return Row(
+                  children: mapFunctions.entries
+                      .map(
+                        (
+                          MapEntry<ConsumerPermission, AbstractMapFunction>
+                              entry,
+                        ) =>
+                            MapFunctionButton(
+                          mapFunction: entry.value,
+                          permission: entry.key,
+                          qsParam: _qsParam,
+                          selection: widget.selection,
+                          callback: (Map<String, String> map) {
+                            _qsParam.addAll(map);
+                            _loadData(context);
+                          },
                         ),
                       )
-                    : RawKeyboardListener(
-                        autofocus: true,
-                        focusNode: keyboardFocusNode,
-                        onKey: (RawKeyEvent event) {
-                          if (event.character != null) {
-                            _search(event.character);
-                          }
-                        },
-                        child: Scrollbar(
-                          controller: _scrollController,
-                          // isAlwaysShown: FollyFields().isWeb,
-                          thumbVisibility: true,
-                          child: ListView.separated(
-                            physics: const AlwaysScrollableScrollPhysics(),
-                            padding: const EdgeInsets.all(16),
+                      .toList(),
+                );
+              },
+            ),
+
+          /// Add Button
+          if (!FollyFields().isMobile && !widget.selection)
+            ValueListenableBuilder<bool>(
+              valueListenable: _insertNotifier,
+              builder: (BuildContext context, bool insert, _) {
+                return insert
+                    ? IconButton(
+                        tooltip: sprintf(
+                          widget.addText,
+                          <dynamic>[widget.uiBuilder.superSingle(context)],
+                        ),
+                        icon: const FaIcon(FontAwesomeIcons.plus),
+                        onPressed: _addEntity,
+                      )
+                    : const SizedBox.shrink();
+              },
+            ),
+
+          /// Legend Button
+          if (!widget.selection &&
+              widget.uiBuilder.listLegend(context).isNotEmpty)
+            IconButton(
+              tooltip: widget.uiBuilder.listLegendTitle(context),
+              icon: FaIcon(widget.uiBuilder.listLegendIcon(context)),
+              onPressed: _showListLegend,
+            ),
+        ],
+      ),
+      floatingActionButton: FollyFields().isMobile && !widget.selection
+          ? ValueListenableBuilder<bool>(
+              valueListenable: _insertNotifier,
+              builder: (BuildContext context, bool insert, _) {
+                return insert
+                    ? FloatingActionButton(
+                        tooltip: sprintf(
+                          widget.addText,
+                          <dynamic>[widget.uiBuilder.superSingle(context)],
+                        ),
+                        onPressed: _addEntity,
+                        child: const FaIcon(FontAwesomeIcons.plus),
+                      )
+                    : const SizedBox.shrink();
+              },
+            )
+          : null,
+      bottomNavigationBar: widget.uiBuilder.buildBottomNavigationBar(context),
+      body: widget.uiBuilder.buildBackgroundContainer(
+        context,
+        SafeFutureBuilder<bool>(
+          future: _loadPermissions(context),
+          waitingMessage: widget.waitingText,
+          builder: (BuildContext context, bool value, _) {
+            return SafeStreamBuilder<int>(
+              stream: _streamController.stream,
+              waitingMessage: widget.waitingText,
+              builder: (BuildContext context, int data, _) {
+                if (data < -1) {
+                  return WaitingMessage(message: widget.waitingText);
+                }
+
+                /// CircularProgressIndicator at list final.
+                int itemCount = _globalItems.length;
+                if (data == -1) {
+                  itemCount++;
+                }
+
+                return RefreshIndicator(
+                  key: _refreshIndicatorKey,
+                  onRefresh: () => _loadData(context),
+                  child: _globalItems.isEmpty
+                      ? TextMessage(
+                          sprintf(
+                            widget.listEmpty,
+                            <dynamic>[
+                              widget.uiBuilder
+                                  .superPlural(context)
+                                  .toLowerCase(),
+                            ],
+                          ),
+                        )
+                      : RawKeyboardListener(
+                          autofocus: true,
+                          focusNode: keyboardFocusNode,
+                          onKey: (RawKeyEvent event) {
+                            if (widget.showSearchButton &&
+                                event.character != null) {
+                              _search(event.character);
+                            }
+                          },
+                          child: Scrollbar(
                             controller: _scrollController,
-                            itemBuilder: (BuildContext context, int index) {
-                              /// Updating...
-                              if (index >= _globalItems.length) {
-                                return const SizedBox(
-                                  height: 80,
-                                  child: Center(
-                                    child: CircularProgressIndicator(),
-                                  ),
-                                );
-                              }
-
-                              T model = _globalItems[index];
-
-                              if (_delete &&
-                                  FollyFields().isMobile &&
-                                  widget.canDelete(model)) {
-                                return Dismissible(
-                                  key: Key('key_${model.id}'),
-                                  direction: DismissDirection.endToStart,
-                                  background: Container(
-                                    color: Colors.red,
-                                    alignment: Alignment.centerRight,
-                                    padding: const EdgeInsets.only(right: 16),
-                                    child: const FaIcon(
-                                      FontAwesomeIcons.trashCan,
-                                      color: Colors.white,
+                            // isAlwaysShown: FollyFields().isWeb,
+                            thumbVisibility: true,
+                            child: ListView.separated(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              padding: const EdgeInsets.all(16),
+                              controller: _scrollController,
+                              itemBuilder: (BuildContext context, int index) {
+                                /// Updating...
+                                if (index >= _globalItems.length) {
+                                  return const SizedBox(
+                                    height: 80,
+                                    child: Center(
+                                      child: CircularProgressIndicator(),
                                     ),
-                                  ),
-                                  confirmDismiss:
-                                      (DismissDirection direction) =>
-                                          _askDelete(),
-                                  onDismissed: (DismissDirection direction) =>
-                                      _deleteEntity(model),
-                                  child: _buildResultItem(
+                                  );
+                                }
+
+                                T model = _globalItems[index];
+
+                                if (_delete &&
+                                    FollyFields().isMobile &&
+                                    widget.canDelete(model)) {
+                                  return Dismissible(
+                                    key: Key('key_${model.id}'),
+                                    direction: DismissDirection.endToStart,
+                                    background: Container(
+                                      color: Colors.red,
+                                      alignment: Alignment.centerRight,
+                                      padding: const EdgeInsets.only(right: 16),
+                                      child: const FaIcon(
+                                        FontAwesomeIcons.trashCan,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                    confirmDismiss:
+                                        (DismissDirection direction) =>
+                                            _askDelete(),
+                                    onDismissed: (DismissDirection direction) =>
+                                        _deleteEntity(model),
+                                    child: _buildResultItem(
+                                      model: model,
+                                      selected:
+                                          _selections.containsKey(model.id),
+                                      canDelete: false,
+                                    ),
+                                  );
+                                } else {
+                                  return _buildResultItem(
                                     model: model,
-                                    selection: selections.containsKey(model.id),
-                                    canDelete: false,
-                                  ),
-                                );
-                              } else {
-                                return _buildResultItem(
-                                  model: model,
-                                  selection: selections.containsKey(model.id),
-                                  canDelete: _delete &&
-                                      FollyFields().isWeb &&
-                                      widget.canDelete(model),
-                                );
-                              }
-                            },
-                            separatorBuilder: (_, __) => const FollyDivider(),
-                            itemCount: itemCount,
+                                    selected: _selections.containsKey(model.id),
+                                    canDelete: _delete &&
+                                        FollyFields().isNotMobile &&
+                                        widget.canDelete(model),
+                                  );
+                                }
+                              },
+                              separatorBuilder: (_, __) => const FollyDivider(),
+                              itemCount: itemCount,
+                            ),
                           ),
                         ),
-                      ),
-              ),
-            ),
-            floatingActionButton: fabAdd,
-          );
-        }
-
-        return Scaffold(
-          appBar: AppBar(
-            title: _getScaffoldTitle(context),
-          ),
-          bottomNavigationBar:
-              widget.uiBuilder.buildBottomNavigationBar(context),
-          body: widget.uiBuilder.buildBackgroundContainer(
-            context,
-            WaitingMessage(message: widget.waitingText),
-          ),
-        );
-      },
+                );
+              },
+            );
+          },
+        ),
+      ),
     );
   }
 
@@ -591,7 +579,7 @@ class AbstractListState<
       delegate: InternalSearch<T, UI, C>(
         buildResultItem: _buildResultItem,
         canDelete: (T model) =>
-            _delete && FollyFields().isWeb && widget.canDelete(model),
+            _delete && FollyFields().isNotMobile && widget.canDelete(model),
         qsParam: widget.qsParam,
         forceOffline: widget.forceOffline,
         itemsPerPage: widget.itemsPerPage,
@@ -612,8 +600,8 @@ class AbstractListState<
       (T? entity) {
         if (entity != null) {
           _internalRoute(
-            entity,
-            !selections.containsKey(entity.id),
+            model: entity,
+            selected: _selections.containsKey(entity.id),
           );
         }
       },
@@ -625,7 +613,7 @@ class AbstractListState<
   ///
   Widget _buildResultItem({
     required T model,
-    required bool selection,
+    required bool selected,
     required bool canDelete,
     Future<void> Function()? afterDeleteRefresh,
     Function(T model)? onTap,
@@ -635,7 +623,7 @@ class AbstractListState<
         mainAxisAlignment: MainAxisAlignment.center,
         children: <Widget>[
           widget.multipleSelection && onTap == null
-              ? FaIcon(selection ? widget.selectedIcon : widget.unselectedIcon)
+              ? FaIcon(selected ? widget.selectedIcon : widget.unselectedIcon)
               : widget.uiBuilder.getLeading(context, model),
         ],
       ),
@@ -673,9 +661,9 @@ class AbstractListState<
             ),
         ],
       ),
-      onTap: onTap != null
+      onTap: onTap != null && !widget.selection
           ? () => onTap(model)
-          : () => _internalRoute(model, !selection),
+          : () => _internalRoute(model: model, selected: selected),
       onLongPress:
           widget.onLongPress == null ? null : () => _internalLongPress(model),
     );
@@ -685,7 +673,7 @@ class AbstractListState<
   ///
   ///
   Future<void> _internalLongPress(T model) async => _push(
-        await widget.onLongPress!(
+        await widget.onLongPress?.call(
           context,
           model,
           widget.uiBuilder,
@@ -698,7 +686,7 @@ class AbstractListState<
   ///
   ///
   Future<void> _addEntity() async => _push(
-        await widget.onAdd!(
+        await widget.onAdd?.call(
           context,
           widget.uiBuilder,
           widget.consumer,
@@ -708,22 +696,23 @@ class AbstractListState<
   ///
   ///
   ///
-  Future<void> _internalRoute(T model, bool selected) async {
+  Future<void> _internalRoute({
+    required T model,
+    required bool selected,
+  }) async {
     if (widget.selection) {
       if (widget.multipleSelection) {
         if (selected) {
-          selections[model.id!] = model;
+          _selections.remove(model.id);
         } else {
-          selections.remove(model.id);
+          _selections[model.id!] = model;
         }
-        if (mounted) {
-          setState(() {});
-        }
+        _streamController.add(_page);
       } else {
         Navigator.of(context).pop(model);
       }
     } else {
-      Widget? next = await widget.onUpdate!(
+      Widget? next = await widget.onUpdate?.call(
         context,
         model,
         widget.uiBuilder,
@@ -846,6 +835,9 @@ class AbstractListState<
   @override
   void dispose() {
     keyboardFocusNode.dispose();
+    _mapFunctionsNotifier.dispose();
+    _insertNotifier.dispose();
+    _streamController.close();
     super.dispose();
   }
 }
@@ -862,7 +854,7 @@ class InternalSearch<
 
   final Widget Function({
     required W model,
-    required bool selection,
+    required bool selected,
     required bool canDelete,
     Future<void> Function()? afterDeleteRefresh,
     Function(W model)? onTap,
@@ -993,22 +985,23 @@ class InternalSearch<
                   forceOffline: forceOffline,
                 ),
                 waitingMessage: waitingText,
-                builder: (BuildContext context, List<W> data) => data.isNotEmpty
-                    ? ListView.separated(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        padding: const EdgeInsets.all(16),
-                        itemBuilder: (BuildContext context, int index) =>
-                            buildResultItem(
-                          model: data[index],
-                          selection: false,
-                          canDelete: canDelete(data[index]),
-                          onTap: (W entity) => close(context, entity),
-                          afterDeleteRefresh: () async => query += '%',
-                        ),
-                        separatorBuilder: (_, __) => const FollyDivider(),
-                        itemCount: data.length,
-                      )
-                    : Center(child: Text(searchListEmpty)),
+                builder: (BuildContext context, List<W> data, _) =>
+                    data.isNotEmpty
+                        ? ListView.separated(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            padding: const EdgeInsets.all(16),
+                            itemBuilder: (BuildContext context, int index) =>
+                                buildResultItem(
+                              model: data[index],
+                              selected: false,
+                              canDelete: canDelete(data[index]),
+                              onTap: (W entity) => close(context, entity),
+                              afterDeleteRefresh: () async => query += '%',
+                            ),
+                            separatorBuilder: (_, __) => const FollyDivider(),
+                            itemCount: data.length,
+                          )
+                        : Center(child: Text(searchListEmpty)),
               ),
             ),
           ),
@@ -1068,7 +1061,7 @@ class InternalSearch<
                     forceOffline: forceOffline,
                   ),
                   waitingMessage: waitingText,
-                  builder: (BuildContext context, List<W> data) => data
+                  builder: (BuildContext context, List<W> data, _) => data
                           .isNotEmpty
                       ? Column(
                           crossAxisAlignment: CrossAxisAlignment.start,

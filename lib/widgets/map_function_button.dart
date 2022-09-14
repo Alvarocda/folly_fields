@@ -37,7 +37,7 @@ class MapFunctionButton extends StatelessWidget {
         qsParam,
         selection: selection,
       ),
-      builder: (BuildContext context, bool data) {
+      builder: (BuildContext context, bool data, _) {
         if (!data) {
           return const SizedBox.shrink();
         }
@@ -61,17 +61,17 @@ class MapFunctionButton extends StatelessWidget {
                 ),
               );
             } else {
-              // Navigator always create a Route<dynamic>.
-              dynamic returnValue = await Navigator.of(context).pushNamed(
-                mapFunction.path,
-                arguments: qsParam,
-              );
+              if (mapFunction.path != null && mapFunction.path!.isNotEmpty) {
+                dynamic returnValue = await Navigator.of(context).pushNamed(
+                  mapFunction.path!,
+                  arguments: qsParam,
+                );
 
-              if (returnValue is Map<String, String>) {
-                map = returnValue;
+                if (returnValue is Map<String, String>) {
+                  map = returnValue;
+                }
               }
             }
-
             if (map != null) {
               callback?.call(map);
             }

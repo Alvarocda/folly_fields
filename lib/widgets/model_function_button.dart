@@ -41,30 +41,37 @@ class ModelFunctionButton<T extends AbstractModel<Object>>
         model,
         selection: selection,
       ),
-      builder: (BuildContext context, bool data) => data
+      builder: (BuildContext context, bool data, _) => data
           ? IconButton(
               tooltip: permission.name,
               icon: IconHelper.faIcon(permission.iconName),
               onPressed: () async {
-                Widget? w = await rowFunction.onPressed(
+                Widget? widget = await rowFunction.onPressed(
                   context,
                   model,
                   selection: selection,
                 );
 
-                dynamic object = w != null
-                    ? await Navigator.of(context).push(
-                        MaterialPageRoute<Object>(
-                          builder: (_) => w,
-                        ),
-                      )
-                    : await Navigator.of(context).pushNamed<Object>(
-                        rowFunction.path,
-                        arguments: <String, dynamic>{
-                          'qsParam': qsParam,
-                          'model': model,
-                        },
-                      );
+                dynamic object;
+
+                if (widget == null) {
+                  if (rowFunction.path != null &&
+                      rowFunction.path!.isNotEmpty) {
+                    object = await Navigator.of(context).pushNamed<Object>(
+                      rowFunction.path!,
+                      arguments: <String, dynamic>{
+                        'qsParam': qsParam,
+                        'model': model,
+                      },
+                    );
+                  }
+                } else {
+                  object = await Navigator.of(context).push(
+                    MaterialPageRoute<Object>(
+                      builder: (_) => widget,
+                    ),
+                  );
+                }
 
                 if (object != null) {
                   callback?.call(object);

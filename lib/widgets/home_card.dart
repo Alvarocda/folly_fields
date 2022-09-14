@@ -10,10 +10,14 @@ class HomeCard<T, O> extends StatelessWidget {
   final String name;
   final IconData iconData;
   final Function(T item) onTap;
-  final List<PopupIconMenuItem<O>> menuItems;
-  final Function(T item, O operation) onMenuSelect;
+  final List<PopupIconMenuItem<O>>? menuItems;
+  final Function(T item, O operation)? onMenuSelect;
   final Color? backgroundColor;
   final String? tooltip;
+  final double fontSize;
+  final FontWeight? fontWeight;
+  final double iconSize;
+  final BoxShadow boxShadow;
 
   ///
   ///
@@ -23,10 +27,18 @@ class HomeCard<T, O> extends StatelessWidget {
     required this.name,
     required this.iconData,
     required this.onTap,
-    required this.menuItems,
-    required this.onMenuSelect,
+    this.menuItems,
+    this.onMenuSelect,
     this.backgroundColor,
     this.tooltip,
+    this.fontSize = 16,
+    this.fontWeight,
+    this.iconSize = 42,
+    this.boxShadow = const BoxShadow(
+      color: Colors.black26,
+      offset: Offset(1, 0.5),
+      blurRadius: 6,
+    ),
     super.key,
   });
 
@@ -44,13 +56,7 @@ class HomeCard<T, O> extends StatelessWidget {
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: const <BoxShadow>[
-          BoxShadow(
-            color: Colors.black26,
-            offset: Offset(1, 0.5),
-            blurRadius: 6,
-          ),
-        ],
+        boxShadow: <BoxShadow>[boxShadow],
       ),
       child: InkWell(
         onTap: () => onTap(item),
@@ -65,8 +71,8 @@ class HomeCard<T, O> extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
                   child: SizedBox(
-                    height: 42,
-                    width: 42,
+                    height: iconSize,
+                    width: iconSize,
                     child: FittedBox(
                       fit: BoxFit.fitHeight,
                       child: FaIcon(
@@ -76,7 +82,7 @@ class HomeCard<T, O> extends StatelessWidget {
                     ),
                   ),
                 ),
-                if (menuItems.isNotEmpty)
+                if (menuItems != null && menuItems!.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
                     child: PopupMenuButton<O>(
@@ -85,11 +91,11 @@ class HomeCard<T, O> extends StatelessWidget {
                         FontAwesomeIcons.ellipsisVertical,
                         color: Colors.black12,
                       ),
-                      itemBuilder: (BuildContext context) => menuItems
+                      itemBuilder: (BuildContext context) => menuItems!
                           .map((PopupIconMenuItem<O> item) => item.widget)
                           .toList(),
                       onSelected: (O operation) =>
-                          onMenuSelect(item, operation),
+                          onMenuSelect?.call(item, operation),
                     ),
                   )
               ],
@@ -102,7 +108,8 @@ class HomeCard<T, O> extends StatelessWidget {
                 maxLines: 2,
                 style: TextStyle(
                   color: onSurface,
-                  fontSize: 16,
+                  fontSize: fontSize,
+                  fontWeight: fontWeight,
                 ),
               ),
             ),

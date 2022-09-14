@@ -37,6 +37,20 @@ abstract class BaseConsumerMock<T extends AbstractModel<Object>>
       );
     }
 
+    if (paths?.join('/').contains('example_model_function_route') ?? false) {
+      return Future<ConsumerPermission>.value(
+        const ConsumerPermission(
+          name: 'Example Model Func. Route',
+          iconName: 'mugHot',
+          view: true,
+          insert: true,
+          update: true,
+          delete: true,
+          menu: true,
+        ),
+      );
+    }
+
     return Future<ConsumerPermission>.value(
       const ConsumerPermission(
         name: 'mock',
@@ -67,7 +81,7 @@ abstract class BaseConsumerMock<T extends AbstractModel<Object>>
     int qtd = int.tryParse(qsParam['q'] ?? '50') ?? 50;
 
     return Future<List<T>>.delayed(
-      const Duration(seconds: 2),
+      const Duration(seconds: 1),
       () => List<T>.generate(
         qtd,
         (int index) => ExampleModel.generate(seed: first + index) as T,
@@ -82,6 +96,7 @@ abstract class BaseConsumerMock<T extends AbstractModel<Object>>
   Future<Map<T, String>> dropdownMap(
     BuildContext context, {
     Map<String, String> qsParam = const <String, String>{},
+    bool forceOffline = false,
   }) async =>
       <T, String>{};
 

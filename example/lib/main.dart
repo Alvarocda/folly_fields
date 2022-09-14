@@ -1,9 +1,12 @@
+// ignore_for_file: avoid_print
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:folly_fields/fields/bool_field.dart';
 import 'package:folly_fields/fields/cep_field.dart';
 import 'package:folly_fields/fields/cest_field.dart';
+import 'package:folly_fields/fields/choice_chip_field.dart';
 import 'package:folly_fields/fields/cnae_field.dart';
 import 'package:folly_fields/fields/cnpj_field.dart';
 import 'package:folly_fields/fields/color_field.dart';
@@ -13,9 +16,12 @@ import 'package:folly_fields/fields/date_field.dart';
 import 'package:folly_fields/fields/date_time_field.dart';
 import 'package:folly_fields/fields/decimal_field.dart';
 import 'package:folly_fields/fields/dropdown_field.dart';
+import 'package:folly_fields/fields/duration_field.dart';
 import 'package:folly_fields/fields/email_field.dart';
+import 'package:folly_fields/fields/file_field.dart';
 import 'package:folly_fields/fields/icon_data_field.dart';
 import 'package:folly_fields/fields/integer_field.dart';
+import 'package:folly_fields/fields/licence_plate_field.dart';
 import 'package:folly_fields/fields/list_field.dart';
 import 'package:folly_fields/fields/local_phone_field.dart';
 import 'package:folly_fields/fields/mac_address_field.dart';
@@ -23,6 +29,7 @@ import 'package:folly_fields/fields/model_field.dart';
 import 'package:folly_fields/fields/multiline_field.dart';
 import 'package:folly_fields/fields/ncm_field.dart';
 import 'package:folly_fields/fields/password_field.dart';
+import 'package:folly_fields/fields/password_visible_field.dart';
 import 'package:folly_fields/fields/phone_field.dart';
 import 'package:folly_fields/fields/string_field.dart';
 import 'package:folly_fields/fields/time_field.dart';
@@ -61,7 +68,6 @@ void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
   FollyFields.start(Config());
-
   runApp(const MyApp());
 }
 
@@ -83,15 +89,9 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'Folly Fields Example',
       theme: ThemeData(
-        primarySwatch: Colors.deepOrange,
+        colorSchemeSeed: Colors.deepOrange,
+        useMaterial3: true,
         brightness: Brightness.dark,
-        snackBarTheme: ThemeData.dark().snackBarTheme.copyWith(
-              backgroundColor: Colors.deepOrange,
-              contentTextStyle: const TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-              ),
-            ),
         toggleableActiveColor: Colors.deepOrange,
       ),
       initialRoute: '/',
@@ -101,7 +101,7 @@ class MyApp extends StatelessWidget {
         '/list': (_) => ExampleList(),
         '/edit': (_) => ExampleEdit(
               ExampleModel.generate(),
-              ExampleBuilder(),
+              const ExampleBuilder(),
               const ExampleConsumer(),
               edit: true,
             ),
@@ -166,66 +166,97 @@ class MyHomePageState extends State<MyHomePage> {
   ///
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Exemplo - Folly Fields'),
-        actions: <Widget>[
-          /// Github
-          IconButton(
-            icon: const Icon(FontAwesomeIcons.github),
-            onPressed: () async {
-              const String url = 'https://github.com/edufolly/folly_fields';
-              if (await canLaunchUrlString(url)) {
-                await launchUrlString(url);
-              } else {
-                await FollyDialogs.dialogMessage(
-                  context: context,
-                  message: 'Não foi possível abrir $url',
-                );
-              }
-            },
-            tooltip: 'Github',
-          ),
+    List<MyMenuItem> menuItems = <MyMenuItem>[
+      /// Github
+      MyMenuItem(
+        name: 'GitHub',
+        iconData: FontAwesomeIcons.github,
+        onPressed: (BuildContext context) {
+          CircularWaiting wait = CircularWaiting(context)..show();
 
-          /// Circular Waiting
-          IconButton(
-            icon: const Icon(FontAwesomeIcons.spinner),
-            onPressed: () {
-              CircularWaiting wait = CircularWaiting(
-                context,
-                message: 'This is the main message.',
-                subtitle: 'Wait 3 seconds...',
-              )..show();
-
+          launchUrlString(
+            'https://github.com/edufolly/folly_fields/',
+            mode: LaunchMode.externalApplication,
+          ).then(
+            (_) {
               Future<void>.delayed(
-                const Duration(seconds: 3),
+                const Duration(seconds: 2),
                 () => wait.close(),
               );
             },
-            tooltip: 'Circular Waiting',
-          ),
+          ).catchError(
+            (dynamic e, StackTrace s) {
+              if (kDebugMode) {
+                print(e);
+                print(s);
+              }
+            },
+          );
+        },
+      ),
 
-          /// Four Images
-          IconButton(
-            icon: const Icon(FontAwesomeIcons.image),
-            onPressed: () => Navigator.of(context).pushNamed('/four_images'),
-            tooltip: 'Quatro Imagens',
-          ),
+      /// Circular Waiting
+      MyMenuItem(
+        name: 'Circular Waiting',
+        iconData: FontAwesomeIcons.spinner,
+        onPressed: (BuildContext context) {
+          CircularWaiting wait = CircularWaiting(
+            context,
+            message: 'This is the main message.',
+            subtitle: 'Wait 3 seconds...',
+          )..show();
 
-          /// Table
-          IconButton(
-            icon: const Icon(FontAwesomeIcons.table),
-            onPressed: () => Navigator.of(context).pushNamed('/table'),
-            tooltip: 'Tabela',
-          ),
+          Future<void>.delayed(
+            const Duration(seconds: 3),
+            () => wait.close(),
+          );
+        },
+      ),
 
-          /// AbstractList
-          IconButton(
-            icon: const Icon(FontAwesomeIcons.list),
-            onPressed: () => Navigator.of(context).pushNamed('/list'),
-            tooltip: 'Lista',
-          ),
-        ],
+      /// Four Images
+      MyMenuItem(
+        name: 'Quatro Imagens',
+        iconData: FontAwesomeIcons.image,
+        onPressed: (BuildContext context) =>
+            Navigator.of(context).pushNamed('/four_images'),
+      ),
+
+      /// Table
+      MyMenuItem(
+        iconData: FontAwesomeIcons.table,
+        onPressed: (BuildContext context) =>
+            Navigator.of(context).pushNamed('/table'),
+        name: 'Tabela',
+      ),
+
+      /// AbstractList
+      MyMenuItem(
+        iconData: FontAwesomeIcons.list,
+        onPressed: (BuildContext context) =>
+            Navigator.of(context).pushNamed('/list'),
+        name: 'Lista',
+      ),
+    ];
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Folly Fields'),
+        actions: Config().isMobile
+            ? <PopupMenuButton<MyMenuItem>>[
+                PopupMenuButton<MyMenuItem>(
+                  tooltip: 'Menu',
+                  icon: const Icon(FontAwesomeIcons.ellipsisVertical),
+                  itemBuilder: (BuildContext context) => menuItems
+                      .map<PopupMenuEntry<MyMenuItem>>(
+                        (MyMenuItem e) => e.popupMenuItem,
+                      )
+                      .toList(),
+                  onSelected: (MyMenuItem item) => item.onPressed(context),
+                )
+              ]
+            : menuItems
+                .map((MyMenuItem item) => item.iconButton(context))
+                .toList(),
       ),
       body: SafeArea(
         child: SafeFutureBuilder<Response>(
@@ -235,7 +266,7 @@ class MyHomePageState extends State<MyHomePage> {
               '/folly_fields/main/example/lib/main.dart',
             ),
           ),
-          builder: (BuildContext context, Response response) {
+          builder: (BuildContext context, Response response, _) {
             int statusCode = response.statusCode;
             if (statusCode < 200 || statusCode > 299) {
               return ErrorMessage(error: 'Status code error: $statusCode');
@@ -319,6 +350,26 @@ class MyHomePageState extends State<MyHomePage> {
 
                     CodeLink(
                       code: code,
+                      tag: 'PasswordVisibleField',
+                      source: 'https://github.com/edufolly/folly_fields/'
+                          'blob/main/lib/fields/password_visible_field.dart',
+                      child:
+                          // [PasswordVisibleField]
+                          PasswordVisibleField(
+                        labelPrefix: labelPrefix,
+                        label: 'Senha Visível*',
+                        enabled: edit,
+                        validator: (String? value) =>
+                            value == null || value.isEmpty
+                                ? 'O campo senha visível precisa ser informado.'
+                                : null,
+                        onSaved: (String? value) => model.password = value!,
+                      ),
+                      // [/PasswordVisibleField]
+                    ),
+
+                    CodeLink(
+                      code: code,
                       tag: 'DecimalField',
                       source: 'https://github.com/edufolly/folly_fields/'
                           'blob/main/lib/fields/decimal_field.dart',
@@ -346,6 +397,7 @@ class MyHomePageState extends State<MyHomePage> {
                         label: 'Integer*',
                         enabled: edit,
                         initialValue: model.integer,
+                        validator: FollyValidators.intGTZero,
                         onSaved: (int? value) => model.integer = value ?? 0,
                       ),
                       // [/IntegerField]
@@ -365,6 +417,7 @@ class MyHomePageState extends State<MyHomePage> {
                         initialValue: model.color,
                         validator: FollyValidators.notNull,
                         onSaved: (Color? value) => model.color = value,
+                        clearOnCancel: false,
                       ),
                       // [/ColorField]
                     ),
@@ -469,6 +522,7 @@ class MyHomePageState extends State<MyHomePage> {
                         validator: (DateTime? value) =>
                             value == null ? 'Informe uma data' : null,
                         onSaved: (DateTime? value) => model.dateTime = value!,
+                        clearOnCancel: false,
                       ),
                       // [/DateTimeField]
                     ),
@@ -502,7 +556,29 @@ class MyHomePageState extends State<MyHomePage> {
                         label: 'Hora*',
                         enabled: edit,
                         initialValue: model.time,
-                        onSaved: (TimeOfDay? value) => model.time = value,
+                        validator: FollyValidators.notNull,
+                        onSaved: (TimeOfDay? value) => model.time = value!,
+                        clearOnCancel: false,
+                      ),
+                      // [/TimeField]
+                    ),
+
+                    CodeLink(
+                      code: code,
+                      tag: 'DurationField',
+                      source: 'https://github.com/edufolly/folly_fields/'
+                          'blob/main/lib/fields/duration_field.dart',
+                      child:
+                          // [DurationField]
+                          DurationField(
+                        labelPrefix: labelPrefix,
+                        label: 'Duração*',
+                        enabled: edit,
+                        initialValue: const Duration(hours: 11),
+                        unit: DurationUnit.hour,
+                        validator: FollyValidators.notNull,
+                        onSaved: (Duration? value) =>
+                            model.duration = value ?? Duration.zero,
                       ),
                       // [/TimeField]
                     ),
@@ -590,6 +666,23 @@ class MyHomePageState extends State<MyHomePage> {
                         onSaved: (String value) => model.cep = value,
                       ),
                       // [/CepField]
+                    ),
+
+                    CodeLink(
+                      code: code,
+                      tag: 'LicencePlateField',
+                      source: 'https://github.com/edufolly/folly_fields/'
+                          'blob/main/lib/fields/licence_plate_field.dart',
+                      child:
+                          // [LicencePlateField]
+                          LicencePlateField(
+                        labelPrefix: labelPrefix,
+                        label: 'Licence Plate*',
+                        enabled: edit,
+                        initialValue: model.licencePlate,
+                        onSaved: (String value) => model.licencePlate = value,
+                      ),
+                      // [/LicencePlateField]
                     ),
 
                     CodeLink(
@@ -688,6 +781,8 @@ class MyHomePageState extends State<MyHomePage> {
                           labelPrefix: labelPrefix,
                           selection: true,
                         ),
+                        validator: FollyValidators.notNull,
+                        clearOnCancel: false,
                       ),
                       // [/ModelField]
                     ),
@@ -702,18 +797,80 @@ class MyHomePageState extends State<MyHomePage> {
                           ListField<ExampleModel, ExampleBuilder>(
                         enabled: edit,
                         initialValue: list,
-                        uiBuilder:
-                            ExampleBuilder(labelPrefix: labelPrefix),
+                        uiBuilder: ExampleBuilder(labelPrefix: labelPrefix),
                         routeAddBuilder:
                             (BuildContext context, ExampleBuilder uiBuilder) =>
                                 ExampleList(
                           labelPrefix: labelPrefix,
                           selection: true,
                           multipleSelection: true,
+                          invertSelection: true,
                         ),
+                        routeEditBuilder: (
+                          BuildContext context,
+                          ExampleModel model,
+                          ExampleBuilder uiBuilder,
+                          bool edit,
+                        ) =>
+                            ExampleEdit(
+                          model,
+                          uiBuilder,
+                          const ExampleConsumer(),
+                          edit: edit,
+                        ),
+                        expandable: true,
+                        clearAllButton: true,
+                        showCounter: true,
+                        showTopAddButton: true,
+                        onChanged: (List<ExampleModel> value) =>
+                            print('Examples in list: ${value.length}'),
                       ),
                       // [/ListField]
                     ),
+
+                    CodeLink(
+                      code: code,
+                      tag: 'FileField',
+                      source: 'https://github.com/edufolly/folly_fields/'
+                          'blob/main/lib/fields/file_field.dart',
+                      child:
+                          // [FileField]
+                          FileField(
+                        label: 'Arquivo(imagem)',
+                        enabled: edit,
+                        onSaved: (Uint8List? newValue) {
+                          model.blob = newValue ?? Uint8List(0);
+                        },
+                        thumbnailSize: const Size(256, 256),
+                        showImageThumbnail: true,
+                        fileType: FileType.image,
+                      ),
+                      // [/FileField]
+                    ),
+
+                    CodeLink(
+                      code: code,
+                      tag: 'ChoiceChipField',
+                      source: 'https://github.com/edufolly/folly_fields/'
+                          'blob/main/lib/fields/choice_chip_field.dart',
+                      child:
+                          // [ChoiceChipField]
+                          ChoiceChipField<int>(
+                        label: 'Frutas',
+                        enabled: edit,
+                        items: const <int, String>{
+                          0: 'Banana',
+                          1: 'Maça',
+                          2: 'Laranja',
+                        },
+                        onChanged: (int? value) =>
+                            print('ChoiceChipField changed to $value'),
+                        validator: FollyValidators.notNull,
+                        onSaved: (int? value) => model.fruitIndex = value,
+                      ),
+                      // [/ChoiceChipField]
+                    ),
+
                     // [/RootCode]
 
                     /// Botão Enviar
@@ -751,9 +908,52 @@ class MyHomePageState extends State<MyHomePage> {
 
       FollyDialogs.dialogMessage(
         context: context,
-        title: 'Resultado do método toMap()',
+        title: 'Resultado do método toMap(). O blob é mostrado como base64.',
         message: model.toMap().toString(),
       );
     }
   }
+}
+
+///
+///
+///
+class MyMenuItem {
+  final String name;
+  final IconData iconData;
+  final Function(BuildContext context) onPressed;
+
+  ///
+  ///
+  ///
+  MyMenuItem({
+    required this.name,
+    required this.iconData,
+    required this.onPressed,
+  });
+
+  ///
+  ///
+  ///
+  IconButton iconButton(BuildContext context) => IconButton(
+        icon: Icon(iconData),
+        onPressed: () => onPressed(context),
+        tooltip: name,
+      );
+
+  ///
+  ///
+  ///
+  PopupMenuItem<MyMenuItem> get popupMenuItem => PopupMenuItem<MyMenuItem>(
+        value: this,
+        child: Row(
+          children: <Widget>[
+            Padding(
+              padding: const EdgeInsets.only(right: 16),
+              child: Icon(iconData),
+            ),
+            Text(name),
+          ],
+        ),
+      );
 }

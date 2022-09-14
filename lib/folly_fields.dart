@@ -15,6 +15,10 @@ enum RunningPlatform {
   web,
   android,
   ios,
+  linux,
+  windows,
+  macos,
+  fuchsia,
 }
 
 ///
@@ -54,7 +58,27 @@ abstract class _InternalConfig {
   ///
   ///
   ///
+  bool get isNotWeb;
+
+  ///
+  ///
+  ///
   bool get isMobile;
+
+  ///
+  ///
+  ///
+  bool get isNotMobile;
+
+  ///
+  ///
+  ///
+  bool get isDesktop;
+
+  ///
+  ///
+  ///
+  bool get isNotDesktop;
 
   ///
   ///
@@ -140,12 +164,6 @@ class FollyFields implements _InternalConfig {
   ///
   ///
   @override
-  bool get isMobile => _holder!.isMobile;
-
-  ///
-  ///
-  ///
-  @override
   bool get isOffline => _holder!.isOffline;
 
   ///
@@ -159,6 +177,36 @@ class FollyFields implements _InternalConfig {
   ///
   @override
   bool get isWeb => _holder!.isWeb;
+
+  ///
+  ///
+  ///
+  @override
+  bool get isNotWeb => _holder!.isNotWeb;
+
+  ///
+  ///
+  ///
+  @override
+  bool get isMobile => _holder!.isMobile;
+
+  ///
+  ///
+  ///
+  @override
+  bool get isNotMobile => _holder!.isNotMobile;
+
+  ///
+  ///
+  ///
+  @override
+  bool get isDesktop => _holder!.isDesktop;
+
+  ///
+  ///
+  ///
+  @override
+  bool get isNotDesktop => _holder!.isNotDesktop;
 
   ///
   ///
@@ -264,8 +312,32 @@ abstract class AbstractConfig implements _InternalConfig {
   ///
   ///
   @override
+  bool get isNotWeb => !isWeb;
+
+  ///
+  ///
+  ///
+  @override
   bool get isMobile =>
       _platform == RunningPlatform.android || _platform == RunningPlatform.ios;
+
+  ///
+  ///
+  ///
+  @override
+  bool get isNotMobile => !isMobile;
+
+  ///
+  ///
+  ///
+  @override
+  bool get isDesktop => !isWeb && !isMobile;
+
+  ///
+  ///
+  ///
+  @override
+  bool get isNotDesktop => !isDesktop;
 
   ///
   ///
@@ -346,6 +418,14 @@ abstract class AbstractConfig implements _InternalConfig {
         _platform = RunningPlatform.android;
       } else if (Platform.isIOS) {
         _platform = RunningPlatform.ios;
+      } else if (Platform.isLinux) {
+        _platform = RunningPlatform.linux;
+      } else if (Platform.isWindows) {
+        _platform = RunningPlatform.windows;
+      } else if (Platform.isMacOS) {
+        _platform = RunningPlatform.macos;
+      } else if (Platform.isFuchsia) {
+        _platform = RunningPlatform.fuchsia;
       }
 
       connectivity ??= Connectivity();
